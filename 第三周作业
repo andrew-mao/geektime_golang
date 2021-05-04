@@ -1,0 +1,85 @@
+package main
+
+import (
+	"fmt"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+)
+
+var stop chan int //管理多个协程关闭
+var done chan int //管理是否存在异常协程
+
+func main() {
+	stop = make(chan int, 2)
+	done = make(chan int, 2)
+	var eg errgroup.Group
+	//存在异常协程，通知全部协程的关闭协程，
+	go func() {
+		<-done
+		close(stop)
+	}()
+
+	eg.Go(serverApp)
+	eg.Go(linuxSign)
+	err := eg.Wait()
+	if err != nil {
+		fmt.Println(err)
+	}
+	close(done)
+}
+
+//http register and deal
+func serverApp() error {
+	defer fmt.Println("结束server app")
+	ser := http.Server{Addr: "localhost:8080",
+		Handler: &ser{}}
+	go func() {
+		//接收到关闭通知
+		<-stop
+		//关闭端口监听服务
+		ser.Close()
+	}()
+	err := ser.ListenAndServe()
+	//运行存在错误，通知管理错误的channel并返回错误
+	if err != nil {
+		done <- 1
+		return err
+	}
+	return errors.New("执行完毕")
+}
+
+type ser struct {
+}
+
+func (s *ser) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	fmt.Fprintln(w, "hello world")
+}
+
+//linux sign register and deal
+func linuxSign() error {
+	defer fmt.Println("结束 linux sign")
+	sigs := make(chan os.Signal, 2)
+	//注册linux信号接收服务
+	signal.Notify(sigs)
+	go func() {
+		<-stop
+		signal.Stop(sigs)
+		close(sigs)
+	}()
+	for {
+		sig := <-sigs
+		switch sig {
+		case syscall.SIGQUIT:
+			fmt.Println("SIGSTOP")
+		case syscall.SIGSTOP:
+			fmt.Println("SIGSTOP")
+		default:
+			done <- 1
+			return errors.New("接收到未知信号"+sig.String())
+		}
+	}
+}
