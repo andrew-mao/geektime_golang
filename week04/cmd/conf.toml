@@ -1,0 +1,25 @@
+[gin]
+listen =":10811"
+jwt = true
+
+[mySQL]
+host ="localhost"
+port =13306
+username ="root"
+password ="123456"
+database ="test"
+encode ="utf-8"
+timezone ="Asia/Shanghai"
+sslmode ="disable"
+
+[redis]
+host =""
+port =""
+password =""
+
+
+[log]
+output ="cmd/log/error.log"
+accessoutput ="cmd/log/access.log"
+Level ="debug"
+
